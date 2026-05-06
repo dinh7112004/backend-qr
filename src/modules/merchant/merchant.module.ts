@@ -1,0 +1,29 @@
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { MerchantController } from './merchant.controller';
+import { MenuItem, MenuItemSchema, Category, CategorySchema } from '../../schemas/menu.schema';
+import { Order, OrderSchema } from '../../schemas/order.schema';
+import { Store, StoreSchema } from '../../schemas/store.schema';
+import { User, UserSchema } from '../../schemas/user.schema';
+import { Voucher, VoucherSchema } from '../../schemas/voucher.schema';
+import { Scan, ScanSchema } from '../../schemas/scan.schema';
+import { StoryTag, StoryTagSchema } from '../../schemas/story-tag.schema';
+import { Review, ReviewSchema } from '../../schemas/review.schema';
+
+@Module({
+  imports: [
+    MongooseModule.forFeature([
+      { name: MenuItem.name, schema: MenuItemSchema },
+      { name: Category.name, schema: CategorySchema },
+      { name: Order.name, schema: OrderSchema },
+      { name: Store.name, schema: StoreSchema },
+      { name: User.name, schema: UserSchema },
+      { name: Voucher.name, schema: VoucherSchema },
+      { name: Scan.name, schema: ScanSchema },
+      { name: StoryTag.name, schema: StoryTagSchema },
+      { name: Review.name, schema: ReviewSchema }
+    ])
+  ],
+  controllers: [MerchantController]
+})
+export class MerchantModule {}
