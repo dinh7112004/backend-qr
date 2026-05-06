@@ -15,6 +15,12 @@ async function bootstrap() {
 
   // No Global Prefix to match exact swagger specs
 
+  // Request logger for debugging
+  app.use((req, res, next) => {
+    console.log(`Incoming Request: ${req.method} ${req.url}`);
+    next();
+  });
+
   // Validation
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
