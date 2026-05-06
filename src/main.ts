@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import * as https from 'https';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -38,6 +39,19 @@ async function bootstrap() {
   SwaggerModule.setup('api-docs', app, document);
 
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
+  
+  // Keep Render awake
+  const url = 'https://backend-qr-h4th.onrender.com/health';
+  setInterval(() => {
+    https.get(url, (res) => {
+      if (res.statusCode === 200) {
+        console.log('Self-ping success: Stay awake mode active 🚀');
+      }
+    }).on('error', (err) => {
+      console.error('Self-ping error:', err.message);
+    });
+  }, 10 * 60 * 1000); // 10 minutes
+
   console.log(`Application is running on: ${await app.getUrl()}`);
   console.log(`Swagger documentation available at: ${await app.getUrl()}/api-docs`);
 }
