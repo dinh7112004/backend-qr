@@ -7,7 +7,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Enable CORS for frontend communication
-  app.enableCors();
+  app.enableCors({
+    origin: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+  });
 
   // No Global Prefix to match exact swagger specs
 
