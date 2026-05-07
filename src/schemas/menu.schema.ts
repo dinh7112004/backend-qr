@@ -37,6 +37,9 @@ export class MenuItem {
 
   @Prop({ default: true })
   isActive: boolean;
+
+  @Prop([String])
+  availableToppings: string[];
 }
 
 export const MenuItemSchema = SchemaFactory.createForClass(MenuItem);

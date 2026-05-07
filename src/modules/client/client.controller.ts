@@ -37,20 +37,61 @@ export class ClientController {
     };
     const categories = await this.categoryModel.find({ storeId }).exec();
     const items = await this.menuItemModel.find({ storeId, isActive: true }).exec();
-    const mappedItems = items.map(item => ({ ...item.toObject(), id: item._id.toString(), category: item.categoryCode }));
-    
-    // Separate regular items and toppings
-    const regularItems = mappedItems.filter(item => item.category !== 'topping');
+    const mappedItems = items.map(item => ({ 
+      ...item.toObject(), 
+      id: item._id.toString(), 
+      category: item.categoryCode,
+      availableToppings: item.availableToppings || []
+    }));
     const toppings = mappedItems.filter(item => item.category === 'topping');
+
+    const defaultCategories = [
+      { code: 'tea', name: { 'vi-VN': 'Trà Sữa ✨', en: 'Milk Tea' } },
+      { code: 'coffee', name: { 'vi-VN': 'Cafe Insta 📸', en: 'Instagram Coffee' } },
+      { code: 'food', name: { 'vi-VN': 'Món Ăn Vặt 🍟', en: 'Snacks' } },
+      { code: 'topping', name: { 'vi-VN': 'Topping 🍡', en: 'Toppings' } }
+    ];
+
+    const defaultItems = [
+      { 
+        id: 'item-01', 
+        name: { 'vi-VN': 'Trà Sữa Nướng Dừa ✨', en: 'Roasted Coconut Milk Tea' },
+        price: 45000, 
+        category: 'tea',
+        image: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500',
+        tags: ['HOT', 'NEW'],
+        desc: { 'vi-VN': 'Vị trà nướng thơm lừng kết hợp cốt dừa béo ngậy cực phẩm!', en: 'Roasted tea with creamy coconut milk.' }
+      },
+      { 
+        id: 'item-02', 
+        name: { 'vi-VN': 'Cafe Muối Biển 📸', en: 'Sea Salt Coffee' },
+        price: 35000, 
+        category: 'coffee',
+        image: 'https://images.unsplash.com/photo-1541167760496-162955ed8a9f?w=500',
+        tags: ['BEST SELLER'],
+        desc: { 'vi-VN': 'Vị đắng của cafe hòa quyện cùng lớp kem muối mặn mặn béo béo.', en: 'Bitter coffee with salty cream foam.' }
+      },
+      { 
+        id: 'item-03', 
+        name: { 'vi-VN': 'Khoai Tây Chiên Phô Mai 🍟', en: 'Cheese Fries' },
+        price: 39000, 
+        category: 'food',
+        image: 'https://images.unsplash.com/photo-1563379926898-05f4575a45d8?w=500',
+        tags: ['CRUNCHY'],
+        desc: { 'vi-VN': 'Khoai tây giòn rụm lắc đẫm bột phô mai cao cấp.', en: 'Crunchy fries with premium cheese powder.' }
+      }
+    ];
+
+    const defaultToppings = [
+      { id: 't-01', name: { 'vi-VN': 'Trân Châu Đen 🍡', en: 'Black Pearl' }, price: 5000, category: 'topping' },
+      { id: 't-02', name: { 'vi-VN': 'Kem Cheese 🧀', en: 'Cheese Foam' }, price: 10000, category: 'topping' }
+    ];
 
     return {
       store,
-      categories: categories.length ? categories.map(cat => cat.toObject()) : [
-        { code: 'tea', name: { 'vi-VN': 'Trà Sữa ✨', en: 'Milk Tea' } },
-        { code: 'coffee', name: { 'vi-VN': 'Cafe Insta 📸', en: 'Instagram Coffee' } }
-      ],
-      items: regularItems,
-      toppings: toppings,
+      categories: categories.length ? categories.map(cat => cat.toObject()) : defaultCategories,
+      items: items.length ? mappedItems.filter(i => i.category !== 'topping') : defaultItems,
+      toppings: toppings.length ? toppings : defaultToppings,
       tableOptions: ['Sạch sẽ', 'Wifi mạnh', 'Nhạc chill', 'Góc sống ảo'],
     };
   }
@@ -107,10 +148,12 @@ export class ClientController {
   @Get('vouchers')
   @ApiOperation({ summary: 'Danh sách voucher client' })
   async getVouchers(@Query('customerPhone') customerPhone?: string) {
-    const vouchers = await this.voucherModel.find({ isActive: true }).lean().exec();
+    const vouchers = await this.voucherModel.find({ isActive: true, isHidden: { $ne: true } }).lean().exec();
     
     let orderCount = 0;
     let usedCodes: string[] = [];
+    let redeemedCodes: string[] = [];
+    let currentPoints = 0;
     
     if (customerPhone) {
       const identifiers = customerPhone.split(',');
@@ -128,18 +171,33 @@ export class ClientController {
       
       if (user) {
         usedCodes = user.usedVoucherCodes || [];
+        redeemedCodes = (user as any).redeemedVoucherCodes || [];
+        currentPoints = user.loyaltyPoints || 0;
       }
     }
 
-    const processedVouchers = vouchers.map(v => ({
-      ...v,
-      isUsed: usedCodes.includes(v.code),
-      isLocked: (v.minOrdersRequired || 0) > orderCount,
-      progress: orderCount,
-      target: v.minOrdersRequired || 0
-    }));
+    const processedVouchers = vouchers.map(v => {
+      const pointCost = (v as any).pointCost || 0;
+      const isRedeemed = redeemedCodes.includes(v.code);
+      const minOrders = v.minOrdersRequired || 0;
+      
+      // A voucher is locked if it requires more orders than user has, 
+      // OR if it has a point cost and hasn't been redeemed yet.
+      const isLocked = minOrders > orderCount || (pointCost > 0 && !isRedeemed);
 
-    return { items: processedVouchers };
+      return {
+        ...v,
+        isUsed: usedCodes.includes(v.code),
+        isRedeemed,
+        isLocked,
+        isAffordable: currentPoints >= pointCost,
+        progress: pointCost > 0 && !isRedeemed ? currentPoints : orderCount,
+        target: pointCost > 0 && !isRedeemed ? pointCost : minOrders,
+        type: pointCost > 0 ? 'loyalty' : 'milestone'
+      };
+    });
+
+    return { items: processedVouchers, currentPoints };
   }
 
   @Get('offers')
@@ -189,7 +247,7 @@ export class ClientController {
   @ApiOperation({ summary: 'Tính quote giỏ hàng' })
   async getQuote(@Body() body: GetQuoteDto) {
     const itemIds = body.items.map(i => i.itemId);
-    const toppingIds = body.items.flatMap(i => i.toppings || []);
+    const toppingIds = body.items.flatMap(i => i.toppings || (i as any).selectedToppings || []);
     const allIds = [...new Set([...itemIds, ...toppingIds])];
     const products = await this.menuItemModel.find({ _id: { $in: allIds } }).exec();
     
@@ -214,10 +272,41 @@ export class ClientController {
     if (body.voucherCode) {
       const voucher = await this.voucherModel.findOne({ code: body.voucherCode, isActive: true });
       if (voucher && subtotal >= (voucher.minOrderValue || 0)) {
-        if (voucher.discountType === 'percentage') {
-          discount = Math.round(subtotal * (voucher.discountValue / 100));
-        } else {
-          discount = voucher.discountValue;
+        let isEligible = true;
+
+        // Check if user identity is provided for milestone/loyalty rules
+        if (voucher.minOrdersRequired > 0 || (voucher as any).pointCost > 0) {
+          if (!body.customerPhone) {
+            isEligible = false;
+          } else {
+            const identifiers = body.customerPhone.split(',');
+            const orderCount = await this.orderModel.countDocuments({ 
+              customerPhone: { $in: identifiers },
+              status: 'completed'
+            }).exec();
+
+            const user = await this.userModel.findOne({ 
+              $or: [
+                { phone: { $in: identifiers } },
+                { _id: { $in: identifiers.filter(id => id.length === 24) } }
+              ]
+            }).exec();
+
+            const redeemedCodes = (user as any)?.redeemedVoucherCodes || [];
+            const pointCost = (voucher as any).pointCost || 0;
+
+            // Enforce rules
+            if (orderCount < voucher.minOrdersRequired) isEligible = false;
+            if (pointCost > 0 && !redeemedCodes.includes(voucher.code)) isEligible = false;
+          }
+        }
+
+        if (isEligible) {
+          if (voucher.discountType === 'percentage') {
+            discount = Math.round(subtotal * (voucher.discountValue / 100));
+          } else {
+            discount = voucher.discountValue;
+          }
         }
       }
     }
@@ -232,7 +321,7 @@ export class ClientController {
   @ApiOperation({ summary: 'Tạo đơn hàng client' })
   async createOrder(@Body() body: CreateOrderDto) {
     const itemIds = body.items.map(i => i.itemId);
-    const toppingIds = body.items.flatMap(i => i.toppings || []);
+    const toppingIds = body.items.flatMap(i => i.toppings || (i as any).selectedToppings || []);
     const allIds = [...new Set([...itemIds, ...toppingIds])];
     const products = await this.menuItemModel.find({ _id: { $in: allIds } }).exec();
     
@@ -243,9 +332,10 @@ export class ClientController {
         let unitPrice = product.price || 0;
         if (item.size === 'x') unitPrice += 10000;
         
+        const toppingList = item.toppings || item.selectedToppings || [];
         const chosenToppings: string[] = [];
-        if (item.toppings) {
-          item.toppings.forEach(tId => {
+        if (toppingList.length > 0) {
+          toppingList.forEach((tId: string) => {
             const topping = products.find(p => p._id.toString() === tId);
             if (topping) {
               unitPrice += topping.price || 0;
@@ -301,10 +391,14 @@ export class ClientController {
           : null;
 
         const usedCodes = user?.usedVoucherCodes || [];
+        const redeemedCodes = (user as any)?.redeemedVoucherCodes || [];
+        const pointCost = (voucher as any).pointCost || 0;
+
         const isLocked = (voucher.minOrdersRequired || 0) > orderCount;
+        const isNotRedeemed = pointCost > 0 && !redeemedCodes.includes(body.voucherCode);
         const isUsed = usedCodes.includes(body.voucherCode);
 
-        if (!isLocked && !isUsed) {
+        if (!isLocked && !isNotRedeemed && !isUsed) {
           if (voucher.discountType === 'percentage') {
             discount = Math.round(subtotal * (voucher.discountValue / 100));
           } else {
@@ -442,22 +536,51 @@ export class ClientController {
 
   @Post('loyalty/redeem')
   @ApiOperation({ summary: 'Đổi quà loyalty' })
-  async redeemLoyalty(@Body() body: any) {
-    return { success: true };
+  async redeemLoyalty(@Body() body: { customerPhone: string, voucherCode: string }) {
+    const { customerPhone, voucherCode } = body;
+    
+    const user = await this.userModel.findOne({ phone: customerPhone }).exec();
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+
+    const voucher = await this.voucherModel.findOne({ code: voucherCode, isActive: true }).exec();
+    if (!voucher) throw new NotFoundException('Voucher không tồn tại hoặc đã hết hạn');
+
+    const pointCost = (voucher as any).pointCost || 0;
+    if (pointCost <= 0) throw new Error('Voucher này không thể đổi bằng điểm');
+
+    if (user.loyaltyPoints < pointCost) {
+      throw new Error('Bạn không đủ điểm để đổi voucher này');
+    }
+
+    const redeemedCodes = (user as any).redeemedVoucherCodes || [];
+    if (redeemedCodes.includes(voucherCode)) {
+      throw new Error('Bạn đã đổi voucher này rồi');
+    }
+
+    // Deduct points and add to redeemed list
+    user.loyaltyPoints -= pointCost;
+    (user as any).redeemedVoucherCodes = [...redeemedCodes, voucherCode];
+    await user.save();
+
+    return { 
+      success: true, 
+      message: `Đổi voucher ${voucher.title} thành công!`,
+      currentPoints: user.loyaltyPoints 
+    };
   }
 
   @Post('loyalty/missions/:missionId/complete')
   @HttpCode(200)
   @ApiOperation({ summary: 'Hoàn thành mission' })
   async completeMission(@Param('missionId') missionId: string) {
-    return { success: true, pointsEarned: 100 };
+    return { success: true, pointsEarned: 0, message: 'Điểm sẽ được cộng khi admin xác nhận tag IG nha!' };
   }
 
   @Post('loyalty/checkin')
   @HttpCode(200)
   @ApiOperation({ summary: 'Check-in loyalty hằng ngày' })
   async checkinLoyalty() {
-    return { success: true, pointsEarned: 10 };
+    return { success: true, pointsEarned: 0, message: 'Mua trà sữa để nhận thêm điểm nha!' };
   }
 
   @Post('loyalty/lucky-box/open')

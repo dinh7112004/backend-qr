@@ -48,6 +48,11 @@ export class CreateMenuItemDto {
   @ApiProperty()
   @IsBoolean()
   isActive: boolean;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsArray()
+  @IsOptional()
+  availableToppings?: string[];
 }
 
 export class ToggleActiveDto {

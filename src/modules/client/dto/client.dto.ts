@@ -20,6 +20,11 @@ export class CartItemDto {
   @IsArray()
   @IsOptional()
   toppings?: string[];
+
+  @ApiPropertyOptional()
+  @IsArray()
+  @IsOptional()
+  selectedToppings?: string[];
 }
 
 export class GetMenuQueryDto {
@@ -47,6 +52,11 @@ export class GetQuoteDto {
   @IsString()
   @IsOptional()
   voucherCode?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  customerPhone?: string;
 
   @ApiPropertyOptional()
   @IsNumber()

@@ -29,8 +29,14 @@ export class User {
   @Prop()
   deviceId?: string;
 
+  @Prop()
+  instagramUsername?: string;
+
   @Prop({ type: [String], default: [] })
   usedVoucherCodes: string[];
+
+  @Prop({ type: [String], default: [] })
+  redeemedVoucherCodes: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

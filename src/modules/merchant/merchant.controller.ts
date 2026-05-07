@@ -42,11 +42,25 @@ export class MerchantController {
   @Post('metrics/story-tag')
   @ApiOperation({ summary: 'Ghi nhận khách tag IG Story thủ công' })
   async recordStoryTag(@Body() body: { storeId?: string, username?: string }) {
+    const username = body.username || 'unknown';
     const tag = new this.storyTagModel({
       storeId: body.storeId || 'store-genz-01',
-      username: body.username || 'unknown'
+      username: username
     });
     await tag.save();
+
+    // Award points if we can find the user by IG username
+    if (username !== 'unknown') {
+      const user = await this.userModel.findOneAndUpdate(
+        { instagramUsername: username },
+        { $inc: { loyaltyPoints: 500 } }, // Mỗi lần tag IG được 500 điểm
+        { new: true }
+      );
+      if (user) {
+        console.log(`Awarded 500 points to user ${user.phone} for IG tag @${username}`);
+      }
+    }
+
     return { success: true };
   }
 
@@ -91,11 +105,18 @@ export class MerchantController {
               const mediaType = change.value.media_type; // 'STORY' or 'MEDIA'
               
               if (mediaType === 'STORY') {
+                const username = change.value.username || 'ig_user';
                 const tag = new this.storyTagModel({
-                  storeId: 'store-genz-01', // Ideally mapped from IG Account ID
-                  username: change.value.username || 'ig_user'
+                  storeId: 'store-genz-01', 
+                  username: username
                 });
                 await tag.save();
+
+                // Award 500 points for IG tag
+                await this.userModel.findOneAndUpdate(
+                  { instagramUsername: username },
+                  { $inc: { loyaltyPoints: 500 } }
+                );
               }
             }
           }
@@ -185,6 +206,10 @@ export class MerchantController {
   @ApiOperation({ summary: 'Cập nhật trạng thái đơn' })
   @ApiParam({ name: 'orderId' })
   async updateOrderStatus(@Param('orderId') orderId: string, @Body() body: UpdateOrderStatusDto) {
+    const order = await this.orderModel.findOne({ orderId }).exec();
+    if (!order) throw new NotFoundException('Order not found');
+
+    const previousStatus = order.status;
     const updateData: any = { status: body.status };
     if (body.note !== undefined) {
       updateData.note = body.note;
@@ -196,6 +221,22 @@ export class MerchantController {
       { new: true }
     );
     if (!updated) throw new NotFoundException('Order not found');
+
+    // Award points ONLY IF status changed TO completed FROM something else
+    if (body.status === 'completed' && previousStatus !== 'completed' && updated.customerPhone) {
+      // Calculate total quantity of items
+      const totalItems = updated.items?.reduce((sum, item) => sum + (item.quantity || 1), 0) || 0;
+      const pointsEarned = totalItems * 500;
+      
+      if (pointsEarned > 0) {
+        await this.userModel.findOneAndUpdate(
+          { phone: updated.customerPhone },
+          { $inc: { loyaltyPoints: pointsEarned } }
+        );
+        console.log(`Awarded ${pointsEarned} points to ${updated.customerPhone} for order ${orderId}`);
+      }
+    }
+
     return { success: true, order: updated };
   }
 
@@ -226,11 +267,59 @@ export class MerchantController {
   @ApiOperation({ summary: 'Danh sách menu item' })
   async getMenuItems(@Query('storeId') storeId?: string, @Query('includeInactive') includeInactive?: string, @Query('q') q?: string) {
     const query: any = {};
-    if (storeId) query.storeId = storeId;
+    if (storeId) query.storeId = storeId || 'store-genz-01';
     if (includeInactive !== 'true' && includeInactive !== '1') query.isActive = true;
     if (q) query['name.vi-VN'] = new RegExp(q, 'i');
-    const items = await this.menuItemModel.find(query).exec();
-    return { items };
+    
+    // Fetch items and completed orders in parallel
+    const [items, orders] = await Promise.all([
+      this.menuItemModel.find(query).exec(),
+      this.orderModel.find({ storeId: query.storeId, status: 'completed' }).exec()
+    ]);
+
+    // Aggregate sold counts from completed orders
+    const soldMap: Record<string, number> = {};
+    orders.forEach(order => {
+      if (order.items && Array.isArray(order.items)) {
+        order.items.forEach((item: any) => {
+          // Count main item
+          const id = item.itemId;
+          if (id) {
+            soldMap[id] = (soldMap[id] || 0) + (item.quantity || 1);
+          }
+          
+          // Count toppings if they exist (assuming they are names for now, 
+          // but we will matching them by name or if we have IDs)
+          if (item.toppings && Array.isArray(item.toppings)) {
+            item.toppings.forEach((tName: string) => {
+              // We'll use a special key for topping names to match later
+              soldMap[`topping:${tName}`] = (soldMap[`topping:${tName}`] || 0) + (item.quantity || 1);
+            });
+          }
+        });
+      }
+    });
+
+    // Enrich menu items with real sold count
+    const enrichedItems = items.map(item => {
+      const itemObj = item.toObject();
+      const itemId = item._id.toString();
+      const nameVi = item.name['vi-VN'];
+      
+      // If it's a topping, try matching by name or ID
+      let soldCount = soldMap[itemId] || 0;
+      if (item.categoryCode === 'topping') {
+        soldCount += (soldMap[`topping:${nameVi}`] || 0);
+      }
+
+      return {
+        ...itemObj,
+        id: itemId,
+        soldCount: soldCount
+      };
+    });
+
+    return { items: enrichedItems };
   }
 
   @Post('menu/items')
@@ -266,6 +355,41 @@ export class MerchantController {
   async deleteMenuItem(@Param('itemId') itemId: string) {
     const deleted = await this.menuItemModel.findByIdAndDelete(itemId);
     if (!deleted) throw new NotFoundException('Item not found');
+    return { success: true };
+  }
+
+  // --- Category Management ---
+  @Get('menu/categories')
+  @ApiOperation({ summary: 'Lấy danh sách danh mục' })
+  async getCategories(@Query('storeId') storeId: string = 'store-genz-01') {
+    const items = await this.categoryModel.find({ storeId }).exec();
+    return { items };
+  }
+
+  @Post('menu/categories')
+  @ApiOperation({ summary: 'Tạo danh mục mới' })
+  async createCategory(@Body() body: any) {
+    const created = await this.categoryModel.create({
+      storeId: body.storeId || 'store-genz-01',
+      code: body.code || body.name['vi-VN'].toLowerCase().replace(/ /g, '-'),
+      name: body.name
+    });
+    return { success: true, item: created };
+  }
+
+  @Patch('menu/categories/:id')
+  @ApiOperation({ summary: 'Cập nhật danh mục' })
+  async updateCategory(@Param('id') id: string, @Body() body: any) {
+    const updated = await this.categoryModel.findByIdAndUpdate(id, body, { new: true });
+    if (!updated) throw new NotFoundException('Category not found');
+    return { success: true, item: updated };
+  }
+
+  @Post('menu/categories/:id/delete')
+  @ApiOperation({ summary: 'Xoá danh mục' })
+  async deleteCategory(@Param('id') id: string) {
+    const deleted = await this.categoryModel.findByIdAndDelete(id);
+    if (!deleted) throw new NotFoundException('Category not found');
     return { success: true };
   }
 
@@ -337,6 +461,14 @@ export class MerchantController {
   async toggleVoucher(@Param('voucherId') voucherId: string, @Body() body: ToggleActiveDto) {
     const item = await this.voucherModel.findByIdAndUpdate(voucherId, { isActive: body.isActive }, { new: true });
     return { success: true, item };
+  }
+
+  @Post('vouchers/:voucherId/delete')
+  @ApiOperation({ summary: 'Xoá voucher' })
+  async deleteVoucher(@Param('voucherId') voucherId: string) {
+    const deleted = await this.voucherModel.findByIdAndDelete(voucherId);
+    if (!deleted) throw new NotFoundException('Voucher not found');
+    return { success: true };
   }
 
   @Get('theme-config')

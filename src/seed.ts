@@ -21,8 +21,10 @@ async function bootstrap() {
   await menuItemModel.deleteMany({});
   await categoryModel.deleteMany({});
   await storeModel.deleteMany({});
-  // Don't delete users to keep favorites persistent across seeds
-  // await userModel.deleteMany({});
+  
+  // RESET ALL LOYALTY POINTS TO 0
+  console.log('Resetting all loyalty points to 0...');
+  await userModel.updateMany({}, { $set: { loyaltyPoints: 0 } });
 
   console.log('Seeding Store...');
   await storeModel.create({

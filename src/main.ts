@@ -38,7 +38,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
+  await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
   
   // Keep Render awake
   const url = 'https://backend-qr-h4th.onrender.com/health';

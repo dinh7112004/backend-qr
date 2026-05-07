@@ -37,6 +37,9 @@ export class Voucher {
 
   @Prop({ default: 0 })
   minOrdersRequired: number;
+
+  @Prop({ default: 0 })
+  pointCost: number;
 }
 
 export const VoucherSchema = SchemaFactory.createForClass(Voucher);
