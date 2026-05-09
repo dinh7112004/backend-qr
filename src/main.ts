@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import * as https from 'https';
+import * as http from 'http';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -41,9 +41,9 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
   
   // Keep Render awake
-  const url = 'https://backend-qr-h4th.onrender.com/health';
+  const url = 'http://localhost:4000/health';
   setInterval(() => {
-    https.get(url, (res) => {
+    http.get(url, (res) => {
       if (res.statusCode === 200) {
         console.log('Self-ping success: Stay awake mode active 🚀');
       }

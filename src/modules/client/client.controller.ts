@@ -23,6 +23,7 @@ export class ClientController {
     @InjectModel(Scan.name) private scanModel: Model<ScanDocument>,
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel('Table') private tableModel: Model<any>,
   ) {}
 
   @Get('menu')
@@ -35,6 +36,10 @@ export class ClientController {
       address: '123 Phan Xích Long, Phú Nhuận',
       tableCode: query.tableCode || 'A12'
     };
+
+    // Lấy thông tin bàn thực tế
+    const tableInfo = await this.tableModel.findOne({ storeId, code: query.tableCode }).exec();
+
     const categories = await this.categoryModel.find({ storeId }).exec();
     const items = await this.menuItemModel.find({ storeId, isActive: true }).exec();
     const mappedItems = items.map(item => ({ 
@@ -89,6 +94,7 @@ export class ClientController {
 
     return {
       store,
+      table: tableInfo || { name: query.tableCode || 'A12' },
       categories: categories.length ? categories.map(cat => cat.toObject()) : defaultCategories,
       items: items.length ? mappedItems.filter(i => i.category !== 'topping') : defaultItems,
       toppings: toppings.length ? toppings : defaultToppings,
@@ -165,7 +171,7 @@ export class ClientController {
       const user = await this.userModel.findOne({ 
         $or: [
           { phone: { $in: identifiers } },
-          { _id: { $in: identifiers.filter(id => id.length === 24) } }
+          { _id: { $in: identifiers.filter(id => /^[0-9a-fA-F]{24}$/.test(id)) } }
         ]
       }).exec();
       
@@ -288,7 +294,7 @@ export class ClientController {
             const user = await this.userModel.findOne({ 
               $or: [
                 { phone: { $in: identifiers } },
-                { _id: { $in: identifiers.filter(id => id.length === 24) } }
+                { _id: { $in: identifiers.filter(id => /^[0-9a-fA-F]{24}$/.test(id)) } }
               ]
             }).exec();
 
@@ -381,7 +387,7 @@ export class ClientController {
         const orConditions: any[] = [];
         if (body.customerPhone) {
           orConditions.push({ phone: body.customerPhone });
-          if (body.customerPhone.length === 24) {
+          if (/^[0-9a-fA-F]{24}$/.test(body.customerPhone)) {
             orConditions.push({ _id: body.customerPhone });
           }
         }

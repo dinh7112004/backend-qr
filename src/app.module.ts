@@ -5,6 +5,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ClientModule } from './modules/client/client.module';
 import { HealthModule } from './modules/health/health.module';
 import { MerchantModule } from './modules/merchant/merchant.module';
+import { AiModule } from './modules/ai/ai.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
 
@@ -15,7 +16,8 @@ import { ConfigModule } from '@nestjs/config';
     AuthModule,
     ClientModule,
     HealthModule,
-    MerchantModule
+    MerchantModule,
+    AiModule
   ],
   controllers: [AppController],
   providers: [AppService],

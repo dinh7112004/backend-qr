@@ -9,6 +9,7 @@ import { Voucher, VoucherSchema } from '../../schemas/voucher.schema';
 import { Scan, ScanSchema } from '../../schemas/scan.schema';
 import { StoryTag, StoryTagSchema } from '../../schemas/story-tag.schema';
 import { Review, ReviewSchema } from '../../schemas/review.schema';
+import { Table, TableSchema } from '../../schemas/table.schema';
 
 @Module({
   imports: [
@@ -21,7 +22,8 @@ import { Review, ReviewSchema } from '../../schemas/review.schema';
       { name: Voucher.name, schema: VoucherSchema },
       { name: Scan.name, schema: ScanSchema },
       { name: StoryTag.name, schema: StoryTagSchema },
-      { name: Review.name, schema: ReviewSchema }
+      { name: Review.name, schema: ReviewSchema },
+      { name: Table.name, schema: TableSchema }
     ])
   ],
   controllers: [MerchantController]
