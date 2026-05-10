@@ -78,7 +78,7 @@ export class MerchantController {
   }
 
   @Get('metrics')
-  @ApiOperation({ summary: 'Lấy các chỉ số thống kê trong ngày' })
+  @ApiOperation({ summary: 'Lấy các chỉ số thống kê' })
   @ApiQuery({ name: 'storeId', required: false })
   async getMetrics(@Query('storeId') storeId?: string) {
     const sId = storeId || 'store-genz-01';
@@ -91,8 +91,13 @@ export class MerchantController {
     startOfYesterday.setDate(startOfYesterday.getDate() - 1);
 
     // Helper to get stats for a range
-    const getStats = async (start: Date, end: Date) => {
-      const query = { storeId: sId, createdAt: { $gte: start, $lt: end } };
+    const getStats = async (start?: Date, end?: Date) => {
+      const query: any = { storeId: sId };
+      if (start || end) {
+        query.createdAt = {};
+        if (start) query.createdAt.$gte = start;
+        if (end) query.createdAt.$lt = end;
+      }
       
       const scans = await this.scanModel.countDocuments(query);
       const orders = await this.orderModel.find({ ...query, status: 'completed' });
@@ -104,6 +109,7 @@ export class MerchantController {
 
     const today = await getStats(startOfDay, new Date(now.getTime() + 86400000));
     const yesterday = await getStats(startOfYesterday, startOfDay);
+    const allTime = await getStats();
 
     const calculateTrend = (cur: number, prev: number) => {
       if (prev === 0) return cur > 0 ? 100 : 0;
@@ -113,9 +119,9 @@ export class MerchantController {
     return {
       scansToday: today.scans,
       scansTrend: calculateTrend(today.scans, yesterday.scans),
-      completedOrdersToday: today.ordersCount,
+      completedOrdersToday: allTime.ordersCount, // Changed to total as requested
       ordersTrend: calculateTrend(today.ordersCount, yesterday.ordersCount),
-      revenueToday: today.revenue,
+      revenueToday: allTime.revenue, // Changed to total as requested
       revenueTrend: calculateTrend(today.revenue, yesterday.revenue),
       storyTagsToday: today.tags,
       storyTagsTrend: calculateTrend(today.tags, yesterday.tags)
@@ -165,7 +171,28 @@ export class MerchantController {
   @ApiOperation({ summary: 'Danh sách menu item' })
   async getMenuItems(@Query('storeId') storeId: string = 'store-genz-01') {
     const items = await this.menuItemModel.find({ storeId }).exec();
-    return { items };
+    
+    // Calculate total sold count for each item from all-time completed orders
+    const allCompletedOrders = await this.orderModel.find({ storeId, status: 'completed' }).exec();
+    const salesMap: Record<string, number> = {};
+    
+    allCompletedOrders.forEach(order => {
+      if (order.items && Array.isArray(order.items)) {
+        order.items.forEach(item => {
+          const id = item.itemId;
+          if (id) {
+            salesMap[id] = (salesMap[id] || 0) + (item.quantity || 0);
+          }
+        });
+      }
+    });
+
+    const itemsWithSales = items.map(item => ({
+      ...item.toObject(),
+      soldCount: salesMap[item._id.toString()] || salesMap[item.code] || 0
+    }));
+
+    return { items: itemsWithSales };
   }
 
   @Post('menu/items')
