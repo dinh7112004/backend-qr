@@ -79,6 +79,12 @@ export class Order {
 
   @Prop()
   idempotencyKey: string;
+
+  @Prop()
+  qrCode: string;
+
+  @Prop()
+  checkoutUrl: string;
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);

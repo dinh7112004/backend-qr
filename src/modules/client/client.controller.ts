@@ -443,23 +443,6 @@ export class ClientController {
 
     const payosOrderCode = Date.now() % 100000000; // 8 digits
 
-    const order = await this.orderModel.create({
-      orderId,
-      storeId: body.storeId || 'store-genz-01',
-      tableCode: body.tableCode || 'A12',
-      customerName: body.customerName,
-      customerPhone: body.customerPhone,
-      items: orderItems,
-      subtotal,
-      discount,
-      serviceFee,
-      total,
-      note: body.note,
-      status: ((body as any).paymentMethod === 'cash' || !(body as any).paymentMethod) ? 'pending' : 'pending_payment',
-      paymentMethod: (body as any).paymentMethod || 'cash',
-      idempotencyKey: payosOrderCode.toString() // Dùng tạm trường này để lưu mã số đơn hàng của PayOS
-    });
-
     let checkoutUrl = '';
     let qrCode = '';
     
@@ -497,6 +480,25 @@ export class ClientController {
         console.error('Failed to call PayOS API:', error);
       }
     }
+
+    const order = await this.orderModel.create({
+      orderId,
+      storeId: body.storeId || 'store-genz-01',
+      tableCode: body.tableCode || 'A12',
+      customerName: body.customerName,
+      customerPhone: body.customerPhone,
+      items: orderItems,
+      subtotal,
+      discount,
+      serviceFee,
+      total,
+      note: body.note,
+      status: ((body as any).paymentMethod === 'cash' || !(body as any).paymentMethod) ? 'pending' : 'pending_payment',
+      paymentMethod: (body as any).paymentMethod || 'cash',
+      idempotencyKey: payosOrderCode.toString(), // Dùng tạm trường này để lưu mã số đơn hàng của PayOS
+      qrCode,
+      checkoutUrl
+    });
 
     return { success: true, orderId: order.orderId, order, checkoutUrl, qrCode };
   }
