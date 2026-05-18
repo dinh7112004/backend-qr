@@ -440,7 +440,7 @@ export class ClientController {
       serviceFee,
       total,
       note: body.note,
-      status: 'pending',
+      status: ((body as any).paymentMethod === 'cash' || !(body as any).paymentMethod) ? 'pending' : 'pending_payment',
       paymentMethod: (body as any).paymentMethod || 'cash'
     });
 
