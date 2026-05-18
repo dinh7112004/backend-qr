@@ -10,6 +10,7 @@ import { User, UserDocument } from '../../schemas/user.schema';
 import { Voucher, VoucherDocument } from '../../schemas/voucher.schema';
 import { Scan, ScanDocument } from '../../schemas/scan.schema';
 import { Review, ReviewDocument } from '../../schemas/review.schema';
+import * as crypto from 'crypto';
 
 @ApiTags('Client')
 @Controller('client')
@@ -25,6 +26,18 @@ export class ClientController {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel('Table') private tableModel: Model<any>,
   ) {}
+
+  private calculatePayOSSignature(data: any, checksumKey: string): string {
+    const sortedKeys = Object.keys(data).sort();
+    const queryString = sortedKeys
+      .map(key => `${key}=${data[key]}`)
+      .join('&');
+    
+    return crypto
+      .createHmac('sha256', checksumKey)
+      .update(queryString)
+      .digest('hex');
+  }
 
   @Get('menu')
   @ApiOperation({ summary: 'Menu theo bàn' })
@@ -428,6 +441,8 @@ export class ClientController {
     const total = subtotal - discount + serviceFee;
     const orderId = 'ORD' + Math.random().toString(36).substr(2, 9).toUpperCase();
 
+    const payosOrderCode = Date.now() % 100000000; // 8 digits
+
     const order = await this.orderModel.create({
       orderId,
       storeId: body.storeId || 'store-genz-01',
@@ -441,10 +456,49 @@ export class ClientController {
       total,
       note: body.note,
       status: ((body as any).paymentMethod === 'cash' || !(body as any).paymentMethod) ? 'pending' : 'pending_payment',
-      paymentMethod: (body as any).paymentMethod || 'cash'
+      paymentMethod: (body as any).paymentMethod || 'cash',
+      idempotencyKey: payosOrderCode.toString() // Dùng tạm trường này để lưu mã số đơn hàng của PayOS
     });
 
-    return { success: true, orderId: order.orderId, order };
+    let checkoutUrl = '';
+    let qrCode = '';
+    
+    if ((body as any).paymentMethod !== 'cash') {
+      try {
+        const payosData = {
+          orderCode: payosOrderCode,
+          amount: total,
+          description: `Thanh toan don ${orderId}`,
+          cancelUrl: 'https://backend-qr-h4th.onrender.com/client/cancel',
+          returnUrl: 'https://backend-qr-h4th.onrender.com/client/success',
+        };
+        
+        const signature = this.calculatePayOSSignature(payosData, '730af6bf1a721b2b9b8c45650bbd633f2d20b6d529d9ff7a0d91b1a189039078');
+        
+        // Sử dụng fetch native của Node (Node 18+)
+        const response = await fetch('https://api-merchant.payos.vn/v2/payment-requests', {
+          method: 'POST',
+          headers: {
+            'x-client-id': 'a587c30c-28c2-4366-8b3e-37f8ee5fdb12',
+            'x-api-key': '6b716a60-e99a-4432-9a0b-5722fedf7024',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ...payosData, signature }),
+        });
+        
+        const resData = await response.json() as any;
+        console.log('PayOS API Response:', JSON.stringify(resData));
+        
+        if (resData.code === '00' && resData.data) {
+          checkoutUrl = resData.data.checkoutUrl;
+          qrCode = resData.data.qrCode;
+        }
+      } catch (error) {
+        console.error('Failed to call PayOS API:', error);
+      }
+    }
+
+    return { success: true, orderId: order.orderId, order, checkoutUrl, qrCode };
   }
 
   @Get('orders')
@@ -623,18 +677,37 @@ export class ClientController {
     
     // Xử lý PayOS (data là 1 object)
     if (typeof data === 'object' && !Array.isArray(data)) {
+      const orderCode = data.orderCode;
+      
+      if (orderCode) {
+        console.log(`Found Order Code from PayOS Webhook: ${orderCode}`);
+        // Tìm đơn hàng bằng orderCode (đã lưu ở trường idempotencyKey)
+        const order = await this.orderModel.findOne({ idempotencyKey: orderCode.toString() }).exec();
+        
+        if (order) {
+          if (order.status !== 'completed') {
+            order.status = 'completed';
+            (order as any).note = `Thanh toán tự động qua PayOS API`;
+            await order.save();
+            console.log(`Order ${order.orderId} updated to completed via orderCode.`);
+            return { error: 0, message: 'Ok' };
+          }
+        }
+      }
+      
+      // Fallback: Nếu không có orderCode thì tìm bằng description như cũ
       const description = data.description || '';
       const match = description.match(/ORD[A-Z0-9]+/i);
       
       if (match) {
         const orderId = match[0].toUpperCase();
-        console.log(`Found Order ID: ${orderId} from PayOS`);
+        console.log(`Found Order ID from PayOS Webhook (Fallback): ${orderId}`);
         
         const order = await this.orderModel.findOne({ orderId }).exec();
         if (order) {
           if (order.status !== 'completed') {
             order.status = 'completed';
-            (order as any).note = `Thanh toán tự động qua PayOS`;
+            (order as any).note = `Thanh toán tự động qua PayOS (Fallback)`;
             await order.save();
             console.log(`Order ${orderId} updated to completed.`);
           }
