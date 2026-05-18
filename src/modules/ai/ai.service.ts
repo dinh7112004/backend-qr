@@ -135,14 +135,22 @@ CÂU HỎI MỚI NHẤT CỦA KHÁCH: "${message}"`;
         }
       } catch (err: any) {
         console.error('[AI] Gemini Generation Error:', err.message || err);
-        if (err.message?.includes('429')) {
-          return "Tớ đang bị quá tải tin nhắn một chút, bạn đợi tớ 30 giây rồi nhắn lại nhé! ✨🧋";
+        try {
+          await new this.logModel({ text: `Lỗi Gemini API: ${err.message || String(err)}`, type: 'error' }).save();
+        } catch (e) {
+          console.error('[AI] Could not save error log to DB:', e);
         }
+        return `🤖 Lỗi Gemini API: ${err.message || String(err)} (Vui lòng kiểm tra lại cấu hình hoặc Quota)`;
       }
     } else {
       console.error('[AI] Error: Model not initialized.');
+      try {
+        await new this.logModel({ text: `Lỗi Gemini: Model chưa được khởi tạo (Có thể thiếu hoặc sai GEMINI_API_KEY)`, type: 'error' }).save();
+      } catch (e) {
+        console.error('[AI] Could not save error log to DB:', e);
+      }
+      return `🤖 Lỗi Gemini: Model chưa được khởi tạo (Có thể thiếu hoặc sai GEMINI_API_KEY ở Render Environment)`;
     }
-    return "Hic, tớ đang bị lạc một chút. Bạn đợi tớ vài giây rồi hỏi lại nhé! 🧋✨";
   }
 
   async getDashboardData() {
