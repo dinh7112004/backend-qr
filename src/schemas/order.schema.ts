@@ -85,6 +85,9 @@ export class Order {
 
   @Prop()
   checkoutUrl: string;
+
+  @Prop()
+  payosError: string;
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
