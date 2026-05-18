@@ -611,27 +611,53 @@ export class ClientController {
 
   @Post('webhook')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Webhook nhận thanh toán từ Casso' })
-  async handleCassoWebhook(@Body() body: any) {
-    console.log('Received Casso Webhook:', JSON.stringify(body));
+  @ApiOperation({ summary: 'Webhook nhận thanh toán từ PayOS/Casso' })
+  async handleWebhook(@Body() body: any) {
+    console.log('Received Webhook:', JSON.stringify(body));
     
-    const transactions = body.data || [];
+    const data = body.data;
+    if (!data) {
+      return { error: 0, message: 'Ok' }; // Xử lý trường hợp ping hoặc data rỗng
+    }
     
-    for (const tx of transactions) {
-      const description = tx.description || '';
+    // Xử lý PayOS (data là 1 object)
+    if (typeof data === 'object' && !Array.isArray(data)) {
+      const description = data.description || '';
       const match = description.match(/ORD-[A-Z0-9]+/i);
       
       if (match) {
         const orderId = match[0].toUpperCase();
-        console.log(`Found Order ID: ${orderId} in transaction ${tx.id}`);
+        console.log(`Found Order ID: ${orderId} from PayOS`);
         
         const order = await this.orderModel.findOne({ orderId }).exec();
         if (order) {
           if (order.status !== 'completed') {
             order.status = 'completed';
-            (order as any).note = `Thanh toán tự động qua Casso (Giao dịch: ${tx.tid})`;
+            (order as any).note = `Thanh toán tự động qua PayOS`;
             await order.save();
             console.log(`Order ${orderId} updated to completed.`);
+          }
+        }
+      }
+    } 
+    // Xử lý Casso (data là 1 array)
+    else if (Array.isArray(data)) {
+      for (const tx of data) {
+        const description = tx.description || '';
+        const match = description.match(/ORD-[A-Z0-9]+/i);
+        
+        if (match) {
+          const orderId = match[0].toUpperCase();
+          console.log(`Found Order ID: ${orderId} from Casso`);
+          
+          const order = await this.orderModel.findOne({ orderId }).exec();
+          if (order) {
+            if (order.status !== 'completed') {
+              order.status = 'completed';
+              (order as any).note = `Thanh toán tự động qua Casso`;
+              await order.save();
+              console.log(`Order ${orderId} updated to completed.`);
+            }
           }
         }
       }
