@@ -38,8 +38,8 @@ export class AiService implements OnModuleInit {
             console.log('[AI] Could not list models, continuing with default...');
           }
 
-          this.model = this.genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-          console.log('Gemini AI CEO Mode initialized 🚀 (Model: gemini-flash-latest)');
+          this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          console.log('Gemini AI CEO Mode initialized 🚀 (Model: gemini-2.0-flash)');
         } catch (err) {
           console.error('[AI] Initialization Failed:', err);
         }
@@ -118,7 +118,7 @@ Trả lời: "Hì hì, bí mật nằm ở những hạt trân châu được nh
 LỊCH SỬ CHAT: ${history.slice(0, 5).map(h => `${h.role}: ${h.content}`).join(' | ')}
 CÂU HỎI MỚI NHẤT CỦA KHÁCH: "${message}"`;
 
-        console.log(`[AI] Generating with gemini-flash-latest...`);
+        console.log(`[AI] Generating with gemini-2.0-flash...`);
         try {
           const result = await this.model.generateContent(prompt);
           let reply = result.response.text().trim();
@@ -129,7 +129,7 @@ CÂU HỎI MỚI NHẤT CỦA KHÁCH: "${message}"`;
           return reply;
         } catch (innerErr: any) {
           console.warn(`[AI] Primary attempt failed (${innerErr.message}), retrying with flash...`);
-          const fallbackModel = this.genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+          const fallbackModel = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
           const result = await fallbackModel.generateContent(prompt);
           return result.response.text().trim().replace(/[*#]/g, '');
         }
