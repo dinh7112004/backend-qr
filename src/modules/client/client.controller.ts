@@ -440,7 +440,8 @@ export class ClientController {
       serviceFee,
       total,
       note: body.note,
-      status: 'pending'
+      status: 'pending',
+      paymentMethod: (body as any).paymentMethod || 'cash'
     });
 
     return { success: true, orderId: order.orderId, order };
