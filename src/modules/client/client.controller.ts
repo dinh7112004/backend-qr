@@ -426,7 +426,7 @@ export class ClientController {
 
     const serviceFee = Math.round((subtotal - discount) * 0.05);
     const total = subtotal - discount + serviceFee;
-    const orderId = 'ORD-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+    const orderId = 'ORD' + Math.random().toString(36).substr(2, 9).toUpperCase();
 
     const order = await this.orderModel.create({
       orderId,
@@ -624,7 +624,7 @@ export class ClientController {
     // Xử lý PayOS (data là 1 object)
     if (typeof data === 'object' && !Array.isArray(data)) {
       const description = data.description || '';
-      const match = description.match(/ORD-[A-Z0-9]+/i);
+      const match = description.match(/ORD[A-Z0-9]+/i);
       
       if (match) {
         const orderId = match[0].toUpperCase();
