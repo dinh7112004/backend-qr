@@ -80,15 +80,44 @@ export class MerchantController {
   @Get('metrics')
   @ApiOperation({ summary: 'Lấy các chỉ số thống kê' })
   @ApiQuery({ name: 'storeId', required: false })
-  async getMetrics(@Query('storeId') storeId?: string) {
+  @ApiQuery({ name: 'date', required: false })
+  async getMetrics(@Query('storeId') storeId?: string, @Query('date') dateStr?: string) {
     const sId = storeId || 'store-genz-01';
     
-    const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const startOfYesterday = new Date(startOfDay);
-    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+    let startOfDay: Date;
+    let endOfDay: Date;
+    
+    if (dateStr) {
+      try {
+        const parts = dateStr.split('-');
+        const year = parseInt(parts[0]);
+        const month = parseInt(parts[1]) - 1;
+        const day = parseInt(parts[2]);
+        
+        // This is 00:00:00 on the selected day in UTC
+        const utcMidnight = new Date(Date.UTC(year, month, day, 0, 0, 0));
+        // Vietnam is 7 hours ahead, so 00:00:00 in Vietnam is 17:00:00 of the previous day in UTC
+        startOfDay = new Date(utcMidnight.getTime() - 7 * 60 * 60 * 1000);
+        endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+      } catch (err) {
+        const nowUtc = new Date();
+        const vnTime = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000);
+        const startOfDayVn = new Date(vnTime);
+        startOfDayVn.setUTCHours(0, 0, 0, 0);
+        startOfDay = new Date(startOfDayVn.getTime() - 7 * 60 * 60 * 1000);
+        endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+      }
+    } else {
+      const nowUtc = new Date();
+      const vnTime = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000);
+      const startOfDayVn = new Date(vnTime);
+      startOfDayVn.setUTCHours(0, 0, 0, 0);
+      startOfDay = new Date(startOfDayVn.getTime() - 7 * 60 * 60 * 1000);
+      endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+    }
+    
+    // Start of yesterday in Vietnam
+    const startOfYesterday = new Date(startOfDay.getTime() - 24 * 60 * 60 * 1000);
 
     // Helper to get stats for a range
     const getStats = async (start?: Date, end?: Date) => {
@@ -107,9 +136,8 @@ export class MerchantController {
       return { scans, ordersCount: orders.length, revenue, tags };
     };
 
-    const today = await getStats(startOfDay, new Date(now.getTime() + 86400000));
+    const today = await getStats(startOfDay, endOfDay);
     const yesterday = await getStats(startOfYesterday, startOfDay);
-    const allTime = await getStats();
 
     const calculateTrend = (cur: number, prev: number) => {
       if (prev === 0) return cur > 0 ? 100 : 0;
@@ -119,9 +147,9 @@ export class MerchantController {
     return {
       scansToday: today.scans,
       scansTrend: calculateTrend(today.scans, yesterday.scans),
-      completedOrdersToday: allTime.ordersCount, // Changed to total as requested
+      completedOrdersToday: today.ordersCount, // Today's count resets at GMT+7 midnight
       ordersTrend: calculateTrend(today.ordersCount, yesterday.ordersCount),
-      revenueToday: allTime.revenue, // Changed to total as requested
+      revenueToday: today.revenue, // Today's revenue resets at GMT+7 midnight
       revenueTrend: calculateTrend(today.revenue, yesterday.revenue),
       storyTagsToday: today.tags,
       storyTagsTrend: calculateTrend(today.tags, yesterday.tags)
