@@ -445,40 +445,42 @@ export class ClientController {
 
     let checkoutUrl = '';
     let qrCode = '';
+    let payosError = '';
     
-    if ((body as any).paymentMethod !== 'cash') {
-      try {
-        const payosData = {
-          orderCode: payosOrderCode,
-          amount: total,
-          description: orderId,
-          cancelUrl: 'https://backend-qr-h4th.onrender.com/client/cancel',
-          returnUrl: 'https://backend-qr-h4th.onrender.com/client/success',
-        };
-        
-        const signature = this.calculatePayOSSignature(payosData, '730af6bf1a721b2b9b8c45650bbd633f2d20b6d529d9ff7a0d91b1a189039078');
-        
-        // Sử dụng fetch native của Node (Node 18+)
-        const response = await fetch('https://api-merchant.payos.vn/v2/payment-requests', {
-          method: 'POST',
-          headers: {
-            'x-client-id': 'a587c30c-28c2-4366-8b3e-37f8ee5fdb12',
-            'x-api-key': '6b716a60-e99a-4432-9a0b-5722fedf7024',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ...payosData, signature }),
-        });
-        
-        const resData = await response.json() as any;
-        console.log('PayOS API Response:', JSON.stringify(resData));
-        
-        if (resData.code === '00' && resData.data) {
-          checkoutUrl = resData.data.checkoutUrl;
-          qrCode = resData.data.qrCode;
-        }
-      } catch (error) {
-        console.error('Failed to call PayOS API:', error);
+    try {
+      const payosData = {
+        orderCode: payosOrderCode,
+        amount: Math.round(total),
+        description: orderId,
+        cancelUrl: 'https://backend-qr-h4th.onrender.com/client/cancel',
+        returnUrl: 'https://backend-qr-h4th.onrender.com/client/success',
+      };
+      
+      const signature = this.calculatePayOSSignature(payosData, '730af6bf1a721b2b9b8c45650bbd633f2d20b6d529d9ff7a0d91b1a189039078');
+      
+      // Sử dụng fetch native của Node (Node 18+)
+      const response = await fetch('https://api-merchant.payos.vn/v2/payment-requests', {
+        method: 'POST',
+        headers: {
+          'x-client-id': 'a587c30c-28c2-4366-8b3e-37f8ee5fdb12',
+          'x-api-key': '6b716a60-e99a-4432-9a0b-5722fedf7024',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...payosData, signature }),
+      });
+      
+      const resData = await response.json() as any;
+      console.log('PayOS API Response:', JSON.stringify(resData));
+      
+      if (resData.code === '00' && resData.data) {
+        checkoutUrl = resData.data.checkoutUrl;
+        qrCode = resData.data.qrCode;
+      } else {
+        payosError = resData.desc || 'Unknown PayOS error';
       }
+    } catch (error: any) {
+      console.error('Failed to call PayOS API:', error);
+      payosError = error.message || 'Fetch failed';
     }
 
     const order = await this.orderModel.create({
@@ -497,7 +499,8 @@ export class ClientController {
       paymentMethod: (body as any).paymentMethod || 'cash',
       idempotencyKey: payosOrderCode.toString(), // Dùng tạm trường này để lưu mã số đơn hàng của PayOS
       qrCode,
-      checkoutUrl
+      checkoutUrl,
+      payosError
     });
 
     return { success: true, orderId: order.orderId, order, checkoutUrl, qrCode };
