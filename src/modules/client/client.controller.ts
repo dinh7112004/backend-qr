@@ -608,6 +608,37 @@ export class ClientController {
   async subscribeMembership(@Body() body: any) {
     return { success: true, expireAt: new Date() };
   }
+
+  @Post('webhook')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Webhook nhận thanh toán từ Casso' })
+  async handleCassoWebhook(@Body() body: any) {
+    console.log('Received Casso Webhook:', JSON.stringify(body));
+    
+    const transactions = body.data || [];
+    
+    for (const tx of transactions) {
+      const description = tx.description || '';
+      const match = description.match(/ORD-[A-Z0-9]+/i);
+      
+      if (match) {
+        const orderId = match[0].toUpperCase();
+        console.log(`Found Order ID: ${orderId} in transaction ${tx.id}`);
+        
+        const order = await this.orderModel.findOne({ orderId }).exec();
+        if (order) {
+          if (order.status !== 'completed') {
+            order.status = 'completed';
+            (order as any).note = `Thanh toán tự động qua Casso (Giao dịch: ${tx.tid})`;
+            await order.save();
+            console.log(`Order ${orderId} updated to completed.`);
+          }
+        }
+      }
+    }
+    
+    return { error: 0, message: 'Ok' };
+  }
 }
 
 
