@@ -468,7 +468,7 @@ export class ClientController {
         const payosData = {
           orderCode: payosOrderCode,
           amount: total,
-          description: `Thanh toan don ${orderId}`,
+          description: orderId,
           cancelUrl: 'https://backend-qr-h4th.onrender.com/client/cancel',
           returnUrl: 'https://backend-qr-h4th.onrender.com/client/success',
         };
