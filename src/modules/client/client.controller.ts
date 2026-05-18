@@ -685,11 +685,11 @@ export class ClientController {
         const order = await this.orderModel.findOne({ idempotencyKey: orderCode.toString() }).exec();
         
         if (order) {
-          if (order.status !== 'completed') {
-            order.status = 'completed';
+          if (order.status !== 'completed' && order.status !== 'pending') {
+            order.status = 'pending';
             (order as any).note = `Thanh toán tự động qua PayOS API`;
             await order.save();
-            console.log(`Order ${order.orderId} updated to completed via orderCode.`);
+            console.log(`Order ${order.orderId} updated to pending via orderCode.`);
             return { error: 0, message: 'Ok' };
           }
         }
@@ -705,11 +705,11 @@ export class ClientController {
         
         const order = await this.orderModel.findOne({ orderId }).exec();
         if (order) {
-          if (order.status !== 'completed') {
-            order.status = 'completed';
+          if (order.status !== 'completed' && order.status !== 'pending') {
+            order.status = 'pending';
             (order as any).note = `Thanh toán tự động qua PayOS (Fallback)`;
             await order.save();
-            console.log(`Order ${orderId} updated to completed.`);
+            console.log(`Order ${orderId} updated to pending.`);
           }
         }
       }
