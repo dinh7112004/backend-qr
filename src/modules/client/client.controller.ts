@@ -705,11 +705,16 @@ export class ClientController {
         
         const order = await this.orderModel.findOne({ orderId }).exec();
         if (order) {
-          if (order.status !== 'completed' && order.status !== 'pending') {
+          if (order.status === 'pending_payment') {
             order.status = 'pending';
             (order as any).note = `Thanh toán tự động qua PayOS (Fallback)`;
             await order.save();
             console.log(`Order ${orderId} updated to pending.`);
+          } else if (order.status === 'pending') {
+            order.status = 'confirmed';
+            (order as any).note = `Thanh toán tự động qua PayOS (Fallback)`;
+            await order.save();
+            console.log(`Order ${orderId} updated to confirmed.`);
           }
         }
       }
